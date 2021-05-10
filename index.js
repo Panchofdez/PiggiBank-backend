@@ -104,7 +104,13 @@ app.post("/api/budgetperiods", requireAuth, async (req, res) => {
   }
 });
 
-app.get("/api/currentbudgetperiod", requireAuth, async (req, res) => {
+app.put("/api/budgetperiods", async (req, res) => {
+  try {
+    const { startDate, type } = req.body;
+  } catch (error) {}
+});
+
+app.get("/api/budgetperiods/current", requireAuth, async (req, res) => {
   try {
     const today = dayjs("05-09-2022", "MM-DD-YYYY");
     console.log(today);
@@ -160,45 +166,47 @@ app.get("/api/currentbudgetperiod", requireAuth, async (req, res) => {
   }
 });
 
-//Set up budget
-app.post("/api/createbudget", requireAuth, async (req, res) => {
+//
+
+app.put("/api/budgetperiods/income", requireAuth, async (req, res) => {
   try {
-    const { income, savings, fixedSpendingList, budgetPeriodType } = req.body;
-    console.log(income, savings, fixedSpendingList, budgetPeriodType);
     const user_id = req.user.id;
-    console.log(user_id);
-    const result = await pool.query(
-      "UPDATE users SET income=$1, savings=$2, budget_period_type=$3 where id=$4 RETURNING *",
-      [income, savings, budgetPeriodType, user_id]
-    );
-    const user = result.rows[0];
-    console.log(user);
+    let { income, start_date, id } = req.body;
+    start_date = dayjs(start_date);
+    await pool.query("UPDATE budget_periods SET income=$1 WHERE user_id = $2 AND start_date >= $3 ", [
+      income,
+      user_id,
+      start_date,
+    ]);
 
-    fixedSpendingList.forEach(async (expense) => {
-      console.log(expense);
-      await pool.query("INSERT INTO fixed_expenses (title, amount, user_id) VALUES($1, $2, $3)", [
-        expense.title,
-        expense.amount,
-        user.id,
-      ]);
-    });
-
-    res.status(200).send({
-      id: user.id,
-      email: user.email,
-      income: user.income,
-      savings: user.savings,
-      budgetPeriodType: user.budget_period_type,
-    });
+    const currentBudgetPeriod = await pool.query("SELECT * FROM budget_periods WHERE id=$1", [id]);
+    return res.status(200).send({ currentBudgetPeriod: currentBudgetPeriod.rows[0] });
   } catch (error) {
-    console.error(error.message);
-    return res.status(400).send({ error: "Unable to create budget, please try again" });
+    return res.status(400).send({ error: "Unable to set budget income, please try again" });
+  }
+});
+
+app.put("/api/budgetperiods/savings", requireAuth, async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    let { savings, start_date, id } = req.body;
+    start_date = dayjs(start_date);
+    await pool.query("UPDATE budget_periods SET savings=$1 WHERE user_id=$2 AND start_date >= $3", [
+      savings,
+      user_id,
+      start_date,
+    ]);
+
+    const currentBudgetPeriod = await pool.query("SELECT * FROM budget_periods WHERE id=$1", [id]);
+    return res.status(200).send({ currentBudgetPeriod: currentBudgetPeriod.rows[0] });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(400).send({ error: "Unable to set budget savings, please try again" });
   }
 });
 
 //Get all the fixed expenses
-
-app.get("/api/fixedexpenses", requireAuth, async (req, res) => {
+app.get("/api/budgetperiods/fixedexpenses", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     const result = await pool.query("SELECT * FROM fixed_expenses WHERE user_id=$1", [user_id]);
@@ -210,6 +218,24 @@ app.get("/api/fixedexpenses", requireAuth, async (req, res) => {
   }
 });
 
+app.post("/api/budgetperiods/fixedexpenses", requireAuth, async (req, res) => {
+  try {
+    const user_id = req.user.id;
+    const { id, fixedSpendingList } = req.body;
+    fixedSpendingList.forEach(async (expense) => {
+      console.log(expense);
+      await pool.query("INSERT INTO fixed_expenses (title, amount, user_id, budget_period_id) VALUES($1, $2, $3, $4)", [
+        expense.title,
+        expense.amount,
+        user_id,
+        id,
+      ]);
+    });
+  } catch (error) {
+    console.error(error.message);
+    return res.status(400).send({ error: "Unable to add fixed expenses, please try again" });
+  }
+});
 app.listen(5000, () => {
   console.log("Server has started on port 5000");
 });
@@ -256,3 +282,32 @@ const addBudgetPeriods = async (
     return Promise.reject(error);
   }
 };
+
+//Set up budget
+// app.post("/api/createbudget", requireAuth, async (req, res) => {
+//   try {
+//     const { income, savings, fixedSpendingList, budgetPeriodType, budgetPeriodId } = req.body;
+//     console.log(income, savings, fixedSpendingList, budgetPeriodType);
+//     const user_id = req.user.id;
+//     console.log(user_id);
+//     const result = await pool.query("UPDATE budget_periods SET income=$1, savings=$2 where id=$4 RETURNING *", [
+//       income,
+//       savings,
+//       budgetPeriodType,
+//       user_id,
+//     ]);
+//     const user = result.rows[0];
+//     console.log(user);
+
+//     res.status(200).send({
+//       id: user.id,
+//       email: user.email,
+//       income: user.income,
+//       savings: user.savings,
+//       budgetPeriodType: user.budget_period_type,
+//     });
+//   } catch (error) {
+//     console.error(error.message);
+//     return res.status(400).send({ error: "Unable to create budget, please try again" });
+//   }
+// });
