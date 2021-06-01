@@ -3,6 +3,9 @@ const bcrypt = require("bcryptjs");
 const pool = require("../db");
 const express = require("express");
 const router = express.Router();
+const fetch = require("node-fetch");
+
+let refreshTokens = [];
 
 //Authentication with email and password
 router.post("/signup", async (req, res) => {
@@ -35,8 +38,10 @@ router.post("/signup", async (req, res) => {
     console.log(result);
     const user = result.rows[0];
     console.log(user);
-    const accessToken = jwt.sign({ userId: user.id, email: user.email }, process.env.SECRET_KEY);
-    res.status(200).send({ token: accessToken, email: user.email });
+    const accessToken = generateAccessToken({ userId: user.id, email: user.email });
+    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email });
+
+    res.status(200).send({ accessToken, refreshToken, email: user.email });
   } catch (error) {
     console.log(error.message);
     return res.status(400).send({ error: "Invalid email, email already signed up" });
@@ -66,9 +71,15 @@ router.post("/signin", async (req, res) => {
     if (!isValid) {
       res.status(400).send({ error: "Invalid password" });
     }
-    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.SECRET_KEY);
+    const accessToken = generateAccessToken({ userId: user.id, email: user.email });
+    const refreshToken = generateRefreshToken({ userId: user.id, email: user.email });
+
+    //add the refresh token to user in database
+    await pool.query("UPDATE users SET refresh_token = $1 WHERE id=$2", [refreshToken, user.id]);
+
     res.status(200).send({
-      token,
+      accessToken,
+      refreshToken,
       email: user.email,
       income: user.income,
       savings: user.savings,
@@ -76,7 +87,44 @@ router.post("/signin", async (req, res) => {
     });
   } catch (error) {
     console.log(error.message);
-    return res.status(400).send({ error: "Invalid email or password" });
+    return res.status(400).send({ error: "Unable to sign in, please try again" });
+  }
+});
+
+router.post("/token", async (req, res) => {
+  try {
+    const refreshToken = req.body.token;
+    console.log("REFRESH TOKEN", refreshToken);
+    if (refreshToken === null) {
+      return res.sendStatus(401);
+    }
+
+    let result = await pool.query("SELECT refresh_token FROM users WHERE refresh_token=$1", [refreshToken]);
+    result = result.rows;
+    console.log("RESULT", result);
+
+    //if refresh token can't be found in database then it must be invalid
+    if (result.length === 0) return res.sendStatus(403);
+    const payload = await jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    console.log("PAYLOAD", payload);
+    const { userId, email } = payload;
+    const accessToken = generateAccessToken({ userId, email });
+    res.json({ accessToken });
+  } catch (error) {
+    console.log(error);
+    res.status(403).send({ error: "Unable to retrieve access token" });
+  }
+});
+
+router.delete("/signout", async (req, res) => {
+  try {
+    const refreshToken = req.body.token;
+    console.log("DELETE REFRESH TOKEN", refreshToken);
+    await pool.query("UPDATE users SET refresh_token=null WHERE refresh_token=$1", [refreshToken]);
+    res.sendStatus(204);
+  } catch (error) {
+    console.log(error.message);
+    res.sendStatus(400);
   }
 });
 
@@ -85,6 +133,73 @@ router.put("/resetpassword", async (req, res) => {
     const { email, newPassword, confirmPassword } = req.body;
     const user = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
   } catch (error) {}
+});
+
+router.post("/facebooklogin", (req, res) => {
+  const { token } = req.body;
+  console.log("ACCESS TOKEN", token);
+  let urlGraphFacebook;
+
+  urlGraphFacebook = `https://graph.facebook.com/v10.0/me?fields=email&access_token=${token}`;
+
+  fetch(urlGraphFacebook, {
+    method: "GET",
+  })
+    .then((response) => response.json())
+    .then(async (response) => {
+      console.log(response);
+      const { email } = response;
+      console.log("email", email);
+      const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
+      let user = result.rows[0];
+
+      //if no user then we sign up a new user else we sign in the existing user;
+      if (!user) {
+        user = await pool.query("INSERT INTO users (email) VALUES($1) RETURNING *", [email]);
+        console.log("USER", user);
+      }
+      const accessToken = generateAccessToken({ userId: user.id, email });
+      const refreshToken = generateRefreshToken({ userId: user.id, email });
+      res.status(200).send({
+        accessToken,
+        refreshToken,
+        email: user.email,
+        income: user.income,
+        savings: user.savings,
+        createdBudget: user.created_budget,
+      });
+    })
+    .catch((error) => {
+      console.log(error);
+      return res.status(400).send({ error: "Unable to sign in with facebook, please try again" });
+    });
+});
+
+router.post("/googlelogin", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
+    let user = result.rows[0];
+
+    //if no user then we sign up a new user else we sign in the existing user;
+    if (!user) {
+      user = await pool.query("INSERT INTO users (email) VALUES($1) RETURNING *", [email]);
+    }
+    console.log("USER", user);
+    const accessToken = generateAccessToken({ userId: user.id, email });
+    const refreshToken = generateRefreshToken({ userId: user.id, email });
+    res.status(200).send({
+      accessToken,
+      refreshToken,
+      email: user.email,
+      income: user.income,
+      savings: user.savings,
+      createdBudget: user.created_budget,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(400).send({ error: "Unable to sign in/sign up, please try again" });
+  }
 });
 
 const isEmail = (email) => {
@@ -97,6 +212,13 @@ const isEmail = (email) => {
 const isEmpty = (string) => {
   if (string.trim() === "") return true;
   else return false;
+};
+
+const generateAccessToken = (user) => {
+  return jwt.sign(user, process.env.SECRET_KEY, { expiresIn: "15m" });
+};
+const generateRefreshToken = (user) => {
+  return jwt.sign(user, process.env.REFRESH_TOKEN_SECRET);
 };
 
 module.exports = router;

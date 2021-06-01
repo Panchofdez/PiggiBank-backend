@@ -11,6 +11,10 @@ module.exports = (req, res, next) => {
   const token = authorization.replace("Bearer ", "");
   jwt.verify(token, process.env.SECRET_KEY, async (err, payload) => {
     if (err) {
+      console.log(err);
+      if (err.name === "TokenExpiredError") {
+        return res.status(401).send({ error: err.name });
+      }
       return res.status(401).send({ error: "You must be logged in" });
     }
     const { userId } = payload;
