@@ -5,7 +5,10 @@ const express = require("express");
 const router = express.Router();
 const fetch = require("node-fetch");
 
-let refreshTokens = [];
+//Mailgun js setup
+const API_KEY = "30b130ca9331b7f837e13cd9ab9696c5-1d8af1f4-932b6476";
+const DOMAIN = "sandbox22577e723c414ba48c1ed115088d376f.mailgun.org";
+const mailgun = require("mailgun-js")({ apiKey: API_KEY, domain: DOMAIN });
 
 //Authentication with email and password
 router.post("/signup", async (req, res) => {
@@ -128,13 +131,6 @@ router.delete("/signout", async (req, res) => {
   }
 });
 
-router.put("/resetpassword", async (req, res) => {
-  try {
-    const { email, newPassword, confirmPassword } = req.body;
-    const user = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
-  } catch (error) {}
-});
-
 router.post("/facebooklogin", (req, res) => {
   const { token } = req.body;
   console.log("ACCESS TOKEN", token);
@@ -199,6 +195,59 @@ router.post("/googlelogin", async (req, res) => {
   } catch (error) {
     console.log(error);
     return res.status(400).send({ error: "Unable to sign in/sign up, please try again" });
+  }
+});
+
+router.post("/verificationcode", async (req, res) => {
+  try {
+    const { email } = req.body;
+    const code = Math.floor(100000 + Math.random() * 900000);
+    console.log(email, code);
+    const data = {
+      from: "PiggiBank <piggibankco@gmail.com>",
+      to: `${email}`,
+      subject: "Reset Your Password",
+      text: `Your verification code is : ${code}`,
+    };
+
+    mailgun.messages().send(data, (error, body) => {
+      if (error) {
+        console.log(error);
+        return res.status(400).send({ error });
+      }
+      console.log(body);
+      return res.status(200).send({ code });
+    });
+  } catch (error) {
+    console.log(error);
+    return res.status(400).send({ error });
+  }
+});
+
+router.put("/resetpassword", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+    if (email === null || newPassword === null || isEmpty(email) || isEmpty(newPassword)) {
+      return res.status(400).send({ error: "Email, and password are required" });
+    }
+    if (!isEmail(email)) {
+      return res.status(422).json({ error: "Please provide a valid email" });
+    }
+
+    let user = await pool.query("SELECT id FROM users WHERE email=$1", [email]);
+    user = user.rows[0];
+    if (!user) {
+      return res.status(400).send({ error: "User not found" });
+    }
+    console.log("USER", user);
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user = await pool.query("UPDATE users SET password=$1 WHERE id=$2 RETURNING *", [hashedPassword, user.id]);
+    user = user.rows[0];
+
+    return res.status(200).send({ message: "Success" });
+  } catch (error) {
+    console.log(error);
+    return res.status(400).send({ error: "User not found" });
   }
 });
 
