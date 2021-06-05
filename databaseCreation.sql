@@ -10,7 +10,7 @@ CREATE TABLE users (
 	savings INTEGER DEFAULT 0 CHECK(savings >= 0 AND savings <= 100),
 	created_budget BOOLEAN NOT NULL DEFAULT false,
 	refresh_token VARCHAR(300)
-)
+);
 
 
 CREATE TABLE budget_periods (
@@ -67,11 +67,11 @@ CREATE TABLE budget_period_goals (
 	amount NUMERIC NOT NULL CHECK(amount > 0), 
 	goal_id INTEGER NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
 	budget_period_id INTEGER NOT NULL REFERENCES budget_periods(id) ON DELETE CASCADE
-)
+);
 
 
 CREATE TABLE achievements (
 	id SERIAL PRIMARY KEY,
 	title VARCHAR(100) NOT NULL,
 	user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
-)
+);
