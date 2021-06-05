@@ -4,6 +4,9 @@ const requireAuth = require("../middleware/requireAuth");
 const express = require("express");
 const router = express.Router();
 
+/**
+ * Route to add recurring budget periods for a given user. Takes in the budget period type and startDate
+ */
 router.post("/", requireAuth, async (req, res) => {
   try {
     let { type, startDate } = req.body;
@@ -13,8 +16,8 @@ router.post("/", requireAuth, async (req, res) => {
     startDate = dayjs(startDate).startOf("day");
     console.log(startDate);
 
+    //Add budget periods based on period type
     if (type === "monthly") {
-      //we want to add a 12 monthly budget periods (year's worth)
       await addBudgetPeriods(startDate, type, user_id, 1, "month");
     } else if (type === "weekly") {
       await addBudgetPeriods(startDate, type, user_id, 1, "week");
@@ -28,6 +31,7 @@ router.post("/", requireAuth, async (req, res) => {
       return res.status(400).send({ error: "Invalid budget period type" });
     }
 
+    //Retrieves the most current budget period
     let currentBudgetPeriod = await pool.query(
       "SELECT * FROM budget_periods WHERE user_id = $1 AND end_date > $2 ORDER BY end_date ASC LIMIT 1",
       [user_id, startDate]
@@ -40,6 +44,9 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Route to update the budget period type. This entails changing all the following budget periods to the given type or adding new ones if there are no more budget periods
+ */
 router.put("/", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -149,6 +156,9 @@ router.put("/", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Route to retrieve the most current budget period
+ */
 router.get("/current", requireAuth, async (req, res) => {
   try {
     const today = dayjs();
@@ -225,6 +235,16 @@ const getTotalBudget = (income, fixedSpending, savings) => {
   return income - fixedSpending - (income - fixedSpending) * (savings / 100);
 };
 
+/**
+ *Adds recurring budget periods for the length of a year
+ * @param {*} initialDate date to start adding budget periods
+ * @param {*} type budget period type
+ * @param {*} user_id
+ * @param {*} amount number of time units to add. For ex. biweekly is 2 (amount) weeks
+ * @param {*} unit unit of time. For ex. Month
+ * @param {*} total_budget the initial total budget of the period type
+ * @returns a promise to indicate if budget periods were added successfully
+ */
 const addBudgetPeriods = async (initialDate, type, user_id, amount, unit, total_budget = 0) => {
   try {
     let start_date = initialDate;

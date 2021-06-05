@@ -4,6 +4,11 @@ const requireAuth = require("../middleware/requireAuth");
 const express = require("express");
 const router = express.Router();
 
+/**
+ * Retrieves the average amount to take out of each budget period to achieve the goal.
+ * It takes in the goal amount which is the money it takes to reach the goal,
+ * and it takes the numUnits and unitOfTime which is used to calculate how long we have to achieve the goal
+ */
 router.get("/averageamount", requireAuth, async (req, res) => {
   try {
     const { amount, numUnits, unitOfTime } = req.query;
@@ -38,6 +43,10 @@ router.get("/averageamount", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Creates a user goal and updates the necessary budget periods to take out the amount needed to achieve the goal.
+ *
+ */
 router.post("/", requireAuth, async (req, res) => {
   try {
     const { title, amount, duration, averageAmount, endDate, colour, icon, currentBudgetPeriodId } = req.body;
@@ -60,11 +69,6 @@ router.post("/", requireAuth, async (req, res) => {
       [user_id, endDate, today]
     );
     budgetPeriods = budgetPeriods.rows;
-    // let numBudgetPeriods = budgetPeriods.length;
-    // console.log("BUDGETPERIODS", budgetPeriods);
-    // console.log("NUMBUDGETPERIODS", numBudgetPeriods);
-    // const averageAmount = amount / numBudgetPeriods;
-    // console.log("AVERAGE", averageAmount);
 
     //then link the user goals with a user's budget periods until the goal is complete
     if (budgetPeriods.length === 0) {
@@ -94,6 +98,7 @@ router.post("/", requireAuth, async (req, res) => {
     goals = goals.rows;
     // console.log("GOALS", goals);
 
+    //Calculates the progress of each goal and adds it to the goal object
     let updatedGoals = await Promise.all(
       goals.map(async (goal) => {
         console.log(goal);
@@ -116,6 +121,9 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Gets the achievements of the user
+ */
 router.get("/achievements", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -169,6 +177,8 @@ router.get("/achievements", requireAuth, async (req, res) => {
     console.log(dayjs("May 23 2022") >= fullYear);
 
     console.log(amountSaved, completedGoals, numBudgetPeriods);
+
+    //array containing the user achievements
     let achievements = [
       {
         title: "Save $100",
@@ -215,12 +225,16 @@ router.get("/achievements", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Get the goals that are affecting the current budget period
+ */
 router.get("/:currentBudgetPeriodId", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     const { currentBudgetPeriodId } = req.params;
     console.log(user_id, currentBudgetPeriodId);
     const today = dayjs();
+    //get all the user goals
     let goals = await pool.query("SELECT * FROM goals WHERE user_id=$1", [user_id]);
     goals = goals.rows;
     console.log("GOALS", goals);
@@ -230,6 +244,7 @@ router.get("/:currentBudgetPeriodId", requireAuth, async (req, res) => {
     ]);
     currentGoals = currentGoals.rows;
 
+    //only get the goals that are taking money from the budget of the current budget period
     goals = goals.filter((goal) => {
       for (let i = 0; i < currentGoals.length; i++) {
         if (currentGoals[i].goal_id === goal.id) {
@@ -241,6 +256,7 @@ router.get("/:currentBudgetPeriodId", requireAuth, async (req, res) => {
 
     console.log("AFTER", goals);
 
+    //calculate the progress of each goal
     let updatedGoals = await Promise.all(
       goals.map(async (goal) => {
         const progress = await pool.query(

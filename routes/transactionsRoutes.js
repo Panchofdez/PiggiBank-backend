@@ -4,16 +4,22 @@ const requireAuth = require("../middleware/requireAuth");
 const express = require("express");
 const router = express.Router();
 
+/**
+ * Posts a user transaction for the current budget period and then returns all the transaction for the period
+ */
 router.post("/", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     let { category, amount, note, date, budget_period_id, transaction_type, icon, colour } = req.body;
     date = dayjs(date);
+
+    //insert the new transaction into transactions table
     await pool.query(
       "INSERT INTO transactions (category, amount, note, date, transaction_type, user_id, budget_period_id, icon, colour) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
       [category, amount, note, date, transaction_type, user_id, budget_period_id, icon, colour]
     );
 
+    //retrieve all the transactions of current budget period for the given user
     let transactions = await pool.query("SELECT * FROM transactions WHERE user_id = $1 AND budget_period_id=$2", [
       user_id,
       budget_period_id,
@@ -29,6 +35,9 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Deletes a transaction
+ */
 router.delete("/", requireAuth, async (req, res) => {
   try {
     const { transaction_id, budget_period_id } = req.body;
@@ -50,11 +59,16 @@ router.delete("/", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Gets the transaction habits of a user for the given budget period
+ */
 router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     const budgetPeriodId = req.params.budgetPeriodId;
     console.log(user_id, budgetPeriodId);
+
+    //retrieve the transactions that are expenses of the user and group them by category
     let expenseHabits = await pool.query(
       "SELECT category, SUM(amount) FROM transactions WHERE user_id=$1 AND budget_period_id=$2 AND transaction_type=$3 GROUP BY category",
       [user_id, budgetPeriodId, "expense"]
@@ -72,6 +86,7 @@ router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
       expenseHabits[i] = { ...item, icon, colour };
     }
 
+    //do the same thing but for transactions that are earnings
     let earningHabits = await pool.query(
       "SELECT category, SUM(amount) FROM transactions WHERE user_id=$1 AND budget_period_id=$2 AND transaction_type=$3 GROUP BY category",
       [user_id, budgetPeriodId, "earning"]
@@ -106,6 +121,7 @@ router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
     );
     previousBudgetPeriodId = previousBudgetPeriodId.rows[0] ? previousBudgetPeriodId.rows[0].id : null;
 
+    //get the transactions of the selected budget period
     let transactions = await pool.query("SELECT * FROM transactions WHERE user_id=$1 AND budget_period_id=$2", [
       user_id,
       currentBudgetPeriod.id,
@@ -126,17 +142,23 @@ router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Get the transaction habits for a single category (For ex. Eat/Drink ) in the selected budget period.
+ */
 router.get("/habits", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     const { category, budgetPeriodId } = req.query;
     console.log(category, budgetPeriodId);
+
+    //get the transactions that are of the selected category and budget period
     let transactions = await pool.query(
       "SELECT * FROM transactions WHERE user_id =$1 AND category = $2 AND budget_period_id =$3",
       [user_id, category, budgetPeriodId]
     );
     transactions = transactions.rows;
 
+    //get the current, next and previous budget period
     let currentBudgetPeriod = await pool.query("SELECT * FROM budget_periods WHERE id=$1", [budgetPeriodId]);
     currentBudgetPeriod = currentBudgetPeriod.rows[0];
     const { start_date, end_date } = currentBudgetPeriod;
@@ -153,6 +175,7 @@ router.get("/habits", requireAuth, async (req, res) => {
     );
     previousBudgetPeriodId = previousBudgetPeriodId.rows[0] ? previousBudgetPeriodId.rows[0].id : null;
 
+    //Get the amount spent for the category in the previous budget period
     let previousAmountSpent = await pool.query(
       "SELECT SUM(amount) FROM transactions WHERE user_id =$1 AND budget_period_id=$2 AND category=$3",
       [user_id, previousBudgetPeriodId, category]
@@ -160,12 +183,15 @@ router.get("/habits", requireAuth, async (req, res) => {
     console.log(previousAmountSpent.rows[0]);
     previousAmountSpent = previousAmountSpent.rows[0].sum !== null ? previousAmountSpent.rows[0].sum : 0;
 
+    //get the amount spent for the category in the current period
     let currentAmountSpent = await pool.query(
       "SELECT SUM(amount) FROM transactions WHERE user_id =$1 AND budget_period_id=$2 AND category=$3",
       [user_id, budgetPeriodId, category]
     );
     console.log(currentAmountSpent.rows[0]);
     currentAmountSpent = currentAmountSpent.rows[0].sum !== null ? currentAmountSpent.rows[0].sum : 0;
+
+    //then calculate the difference between the amount spent in the previous and current periods
     let monthlyDifference;
     if (previousAmountSpent === 0) {
       monthlyDifference = "N/A";

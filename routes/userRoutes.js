@@ -3,6 +3,9 @@ const requireAuth = require("../middleware/requireAuth");
 const express = require("express");
 const router = express.Router();
 
+/**
+ * Retrieve all the relevant information about the user
+ */
 router.get("/", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -20,10 +23,13 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * updates a user to have created the initial budget set to true. This signifies that the inital budget creation process is done
+ */
 router.post("/createdbudget", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
-    //updates a user to have created the initial budget
+
     let user = await pool.query("UPDATE users SET created_budget=$1 WHERE id=$2 RETURNING *", [true, user_id]);
     user = user.rows[0];
     return res.status(200).send({

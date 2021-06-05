@@ -4,6 +4,9 @@ const requireAuth = require("../middleware/requireAuth");
 const express = require("express");
 const router = express.Router();
 
+/**
+ * Route to add a user's fixed income
+ */
 router.post("/income", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -36,6 +39,9 @@ router.post("/income", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Add a user's fixed savings
+ */
 router.post("/savings", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -65,7 +71,9 @@ router.post("/savings", requireAuth, async (req, res) => {
   }
 });
 
-//Get all the fixed expenses
+/**Get all the fixed expenses
+ *
+ */
 router.get("/fixedexpenses", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -78,6 +86,9 @@ router.get("/fixedexpenses", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Adds a users fixed expenses
+ */
 router.post("/fixedexpenses", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
@@ -129,6 +140,13 @@ router.post("/fixedexpenses", requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * Calculates a user's initial budget based on the fixed income, spending and savings
+ * @param {*} income
+ * @param {*} fixedSpending
+ * @param {*} savings
+ * @returns the initial total budget
+ */
 const getTotalBudget = (income, fixedSpending, savings) => {
   return income - fixedSpending - (income - fixedSpending) * (savings / 100);
 };
