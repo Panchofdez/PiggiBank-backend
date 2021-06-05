@@ -43,10 +43,10 @@ router.post("/signup", async (req, res) => {
     }
 
     //check to see if user is already signed up
-    const result = await pool.query("SELECT * FROM users WHERE users.email=$1", [email]);
-    const user = result.rows[0];
+    let isSignedUp = await pool.query("SELECT * FROM users WHERE users.email=$1", [email]);
+    isSignedUp = isSignedUp.rows[0];
 
-    if (user) {
+    if (isSignedUp) {
       return res.status(400).send({ error: "Email is already signed up. Please signin instead" });
     }
 
