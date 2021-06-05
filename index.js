@@ -21,6 +21,9 @@ app.use("/api/goals", goalsRoutes);
 app.use("/api/transactions", transactionsRoutes);
 app.use("/api/user", userRoutes);
 
+app.get("*", (req, res) => {
+  res.send({ message: "Hello welcome to PiggiBank API" });
+});
 app.listen(process.env.PORT || 5000, () => {
   console.log("Server has started on port 5000");
 });
