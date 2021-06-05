@@ -41,6 +41,7 @@ router.post("/", requireAuth, async (req, res) => {
 router.delete("/", requireAuth, async (req, res) => {
   try {
     const { transaction_id, budget_period_id } = req.body;
+    console.log(transaction_id, budget_period_id);
     const user_id = req.user.id;
     await pool.query("DELETE FROM transactions WHERE id=$1", [transaction_id]);
 

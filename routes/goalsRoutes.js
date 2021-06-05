@@ -109,12 +109,26 @@ router.post("/", requireAuth, async (req, res) => {
           ) AS valid_budgets`,
           [goal.id, today]
         );
-        console.log(progress.rows[0].sum);
+        console.log("Progress", progress.rows[0].sum);
         return Promise.resolve({ ...goal, progress: progress.rows[0].sum });
       })
     );
+    //Get all the goals that have been completed recently so we can show a modal celebrating the completion of their goals
+    const recentlyCompletedGoals = [];
+    for (let i = 0; i < updatedGoals.length; i++) {
+      let goal = updatedGoals[i];
+      const amountLeft = parseFloat(goal.amount) - parseFloat(goal.progress);
+      console.log("AMOUNT LEFT", amountLeft);
+      if (amountLeft < 1 && goal.completed === false) {
+        console.log("COMPLETED", goal);
+        recentlyCompletedGoals.push(goal);
+        await pool.query("UPDATE goals SET completed=true WHERE id=$1", [goal.id]);
+        updatedGoals[i].completed = true;
+        updatedGoals[i].progress = goal.amount;
+      }
+    }
 
-    return res.status(200).send({ currentGoals, goals: updatedGoals });
+    return res.status(200).send({ currentGoals, goals: updatedGoals, recentlyCompletedGoals });
   } catch (error) {
     console.log(error.message);
     return res.status(400).send({ error: "Unable to add goals, please try again" });
@@ -151,6 +165,7 @@ router.get("/achievements", requireAuth, async (req, res) => {
         [goals[i].id, today]
       );
       progress = progress.rows[0].sum;
+
       if (progress >= goals[i].amount) {
         console.log(progress, goals[i].amount);
         completedGoals++;
@@ -217,8 +232,26 @@ router.get("/achievements", requireAuth, async (req, res) => {
         completed: amountSaved >= 10000,
       },
     ];
-    console.log(achievements);
-    return res.status(200).send({ achievements });
+
+    const recentlyCompletedAchievements = [];
+    for (let i = 0; i < achievements.length; i++) {
+      if (achievements[i].completed === true) {
+        let result = await pool.query("SELECT * FROM achievements WHERE user_id=$1 AND title=$2", [
+          user_id,
+          achievements[i].title,
+        ]);
+        if (!result.rows[0]) {
+          recentlyCompletedAchievements.push(achievements[i]);
+          await pool.query("INSERT INTO achievements (title, user_id) VALUES ($1, $2)", [
+            achievements[i].title,
+            user_id,
+          ]);
+        }
+      }
+    }
+    console.log("ACHIEVEMENTS ", achievements);
+    console.log("RECENTLY COMPLETED ACHIEVEMENTS", recentlyCompletedAchievements);
+    return res.status(200).send({ achievements, recentlyCompletedAchievements });
   } catch (error) {
     console.log(error.message);
     return res.status(400).send({ error: "Unable to retrieve achievements" });
@@ -259,20 +292,37 @@ router.get("/:currentBudgetPeriodId", requireAuth, async (req, res) => {
     //calculate the progress of each goal
     let updatedGoals = await Promise.all(
       goals.map(async (goal) => {
-        const progress = await pool.query(
+        let progress = await pool.query(
           `SELECT SUM(amount) FROM 
           (
             SELECT amount, start_date, end_date FROM budget_period_goals JOIN budget_periods ON budget_period_goals.budget_period_id = budget_periods.id WHERE goal_id = $1 AND start_date <= $2
           ) AS valid_budgets`,
           [goal.id, today]
         );
-        return Promise.resolve({ ...goal, progress: progress.rows[0].sum });
+
+        progress = progress.rows[0].sum;
+        return Promise.resolve({ ...goal, progress });
       })
     );
 
+    //Get all the goals that have been completed recently so we can show a modal celebrating the completion of their goals
+    const recentlyCompletedGoals = [];
+    for (let i = 0; i < updatedGoals.length; i++) {
+      let goal = updatedGoals[i];
+      const amountLeft = parseFloat(goal.amount) - parseFloat(goal.progress);
+      console.log("AMOUNT LEFT", amountLeft);
+      if (amountLeft < 1 && goal.completed === false) {
+        console.log("COMPLETED", goal);
+        recentlyCompletedGoals.push(goal);
+        await pool.query("UPDATE goals SET completed=true WHERE id=$1", [goal.id]);
+        updatedGoals[i].completed = true;
+        updatedGoals[i].progress = goal.amount;
+      }
+    }
     console.log("UPDATED", updatedGoals);
+    console.log("RECENTLY COMPLETED", recentlyCompletedGoals);
 
-    return res.status(200).send({ goals: updatedGoals });
+    return res.status(200).send({ goals: updatedGoals, recentlyCompletedGoals });
   } catch (error) {
     console.log(error.message);
     return res.status(400).send({ error: "Unable to retrieve your goals" });
