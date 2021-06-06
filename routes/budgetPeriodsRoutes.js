@@ -13,7 +13,7 @@ router.post("/", requireAuth, async (req, res) => {
     type = type.toLowerCase();
     const user_id = req.user.id;
     console.log(user_id);
-    startDate = dayjs(startDate).startOf("day");
+    startDate = dayjs(startDate);
     console.log(startDate);
 
     //Add budget periods based on period type
