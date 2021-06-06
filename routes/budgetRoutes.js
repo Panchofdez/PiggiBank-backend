@@ -113,7 +113,7 @@ router.post("/fixedexpenses", requireAuth, async (req, res) => {
     const { income, savings } = user.rows[0];
 
     let fixedSpendingTotal = await pool.query("SELECT SUM(amount) FROM fixed_expenses WHERE user_id = $1", [user_id]);
-    fixedSpendingTotal = fixedSpendingTotal.rows[0].sum;
+    fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
 
     console.log("fixedSpendingTotal", fixedSpendingTotal);
     //we have to recalculate the total budget
