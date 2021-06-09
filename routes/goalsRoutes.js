@@ -31,21 +31,21 @@ router.get("/averageamount", requireAuth, async (req, res) => {
     //For ex. a user wants to achieve a goal in 3 years but we only have a year's worth in budget periods. This results in the miscalculation of the amount to take out
     //we need to extend the number of budget periods to account for the entire duration expected to achieve the goal
 
-    let periodEndDate = dayjs(budgetPeriods[budgetPeriods.length - 1].end_date);
-    let periodType = budgetPeriods[budgetPeriods.length - 1].period_type;
-
-    while (periodEndDate < endDate) {
-      periodEndDate = periodEndDate.add(NUM_UNITS[periodType], UNIT_OF_TIME[periodType]);
-      if (periodEndDate >= endDate) {
-        break;
-      } else {
-        numBudgetPeriods++;
-      }
-    }
     let averageAmount;
     if (numBudgetPeriods === 0) {
       averageAmount = amount;
     } else {
+      let periodEndDate = dayjs(budgetPeriods[budgetPeriods.length - 1].end_date);
+      let periodType = budgetPeriods[budgetPeriods.length - 1].period_type;
+
+      while (periodEndDate < endDate) {
+        periodEndDate = periodEndDate.add(NUM_UNITS[periodType], UNIT_OF_TIME[periodType]);
+        if (periodEndDate >= endDate) {
+          break;
+        } else {
+          numBudgetPeriods++;
+        }
+      }
       averageAmount = amount / numBudgetPeriods;
     }
     console.log("AVERAGE", averageAmount);
