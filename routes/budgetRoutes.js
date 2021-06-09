@@ -87,7 +87,7 @@ router.get("/fixedexpenses", requireAuth, async (req, res) => {
 });
 
 /**
- * Adds a users fixed expenses
+ * Adds a users fixed expenses by deleting the previous expenses and replacing them with the new fixed spending list
  */
 router.post("/fixedexpenses", requireAuth, async (req, res) => {
   try {

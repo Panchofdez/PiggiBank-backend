@@ -4,6 +4,8 @@ const requireAuth = require("../middleware/requireAuth");
 const express = require("express");
 const router = express.Router();
 
+const UNIT_OF_TIME = { daily: "day", monthly: "month", biweekly: "week", weekly: "week", yearly: "year" };
+const NUM_UNITS = { daily: 1, monthly: 1, biweekly: 2, weekly: 1, yearly: 1 };
 /**
  * Retrieves the average amount to take out of each budget period to achieve the goal.
  * It takes in the goal amount which is the money it takes to reach the goal,
@@ -15,18 +17,31 @@ router.get("/averageamount", requireAuth, async (req, res) => {
     const user_id = req.user.id;
     console.log(amount, numUnits, unitOfTime);
     const today = dayjs();
-    const endDate = today.add(numUnits, unitOfTime);
+    const endDate = today.add(numUnits, unitOfTime).startOf("day");
 
-    console.log("ENDDATE", endDate);
     //calculate the average amount to take out every budget period to achieve the goal
     let budgetPeriods = await pool.query(
-      "SELECT id FROM budget_periods WHERE user_id=$1 AND end_date <= $2 AND end_date > $3",
+      "SELECT id, period_type, end_date FROM budget_periods WHERE user_id=$1 AND end_date <= $2 AND end_date > $3",
       [user_id, endDate, today]
     );
     budgetPeriods = budgetPeriods.rows;
     let numBudgetPeriods = budgetPeriods.length;
-    console.log("BUDGETPERIODS", budgetPeriods);
-    console.log("NUMBUDGETPERIODS", numBudgetPeriods);
+
+    //handles the case for when the user wants to achieve a goal at a date that is farther than the last budget period in the database.
+    //For ex. a user wants to achieve a goal in 3 years but we only have a year's worth in budget periods. This results in the miscalculation of the amount to take out
+    //we need to extend the number of budget periods to account for the entire duration expected to achieve the goal
+
+    let periodEndDate = dayjs(budgetPeriods[budgetPeriods.length - 1].end_date);
+    let periodType = budgetPeriods[budgetPeriods.length - 1].period_type;
+
+    while (periodEndDate < endDate) {
+      periodEndDate = periodEndDate.add(NUM_UNITS[periodType], UNIT_OF_TIME[periodType]);
+      if (periodEndDate >= endDate) {
+        break;
+      } else {
+        numBudgetPeriods++;
+      }
+    }
     let averageAmount;
     if (numBudgetPeriods === 0) {
       averageAmount = amount;
