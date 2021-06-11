@@ -197,6 +197,7 @@ router.post("/facebooklogin", (req, res) => {
       //if no user then we sign up a new user else we sign in the existing user by generating the necessary access and refresh tokens
       if (!user) {
         user = await pool.query("INSERT INTO users (email) VALUES($1) RETURNING *", [email]);
+        user = user.rows[0];
         console.log("USER", user);
       }
       const accessToken = generateAccessToken({ userId: user.id, email });
@@ -231,6 +232,7 @@ router.post("/googlelogin", async (req, res) => {
     //if no user then we sign up a new user with the email else we sign in the existing user;
     if (!user) {
       user = await pool.query("INSERT INTO users (email) VALUES($1) RETURNING *", [email]);
+      user = user.rows[0];
     }
     console.log("USER", user);
     const accessToken = generateAccessToken({ userId: user.id, email });

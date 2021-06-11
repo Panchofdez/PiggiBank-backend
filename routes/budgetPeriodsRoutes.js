@@ -100,11 +100,12 @@ router.put("/", requireAuth, async (req, res) => {
     }
 
     //retrieve the goals to update them according to the budget periods
-    let goals = await pool.query("SELECT * FROM goals WHERE user_id = $1", [user_id]);
+    let goals = await pool.query("SELECT * FROM goals WHERE user_id = $1 AND completed=false", [user_id]);
     goals = goals.rows;
     console.log("GOALS", goals);
 
-    goals.forEach(async (goal) => {
+    for (let i = 0; i < goals.length; i++) {
+      let goal = goals[i];
       let progress = await pool.query(
         `SELECT SUM(amount) FROM 
         (
@@ -116,25 +117,44 @@ router.put("/", requireAuth, async (req, res) => {
       console.log("PROGRESS", progress);
       //calculate the average amount to take out every budget period to achieve the goal
       let budgetPeriods = await pool.query(
-        "SELECT id FROM budget_periods WHERE user_id=$1 AND end_date <= $2 AND end_date > $3",
+        "SELECT id, period_type, end_date FROM budget_periods WHERE user_id=$1 AND end_date <= $2 AND end_date > $3",
         [user_id, goal.end_date, startDate]
       );
       budgetPeriods = budgetPeriods.rows;
       let numBudgetPeriods = budgetPeriods.length;
       console.log("BUDGETPERIODS", budgetPeriods);
       console.log("NUMBUDGETPERIODS", numBudgetPeriods);
-      const averageAmount = (goal.amount - progress) / numBudgetPeriods;
+
+      let averageAmount;
+      if (numBudgetPeriods === 0) {
+        averageAmount = goal.amount - progress;
+      } else {
+        let periodEndDate = dayjs(budgetPeriods[budgetPeriods.length - 1].end_date);
+        let periodType = budgetPeriods[budgetPeriods.length - 1].period_type;
+
+        while (periodEndDate < goal.end_date) {
+          periodEndDate = periodEndDate.add(numUnits[periodType], unitsOfTime[periodType]);
+          if (periodEndDate >= goal.end_date) {
+            break;
+          } else {
+            numBudgetPeriods++;
+          }
+        }
+        averageAmount = (goal.amount - progress) / numBudgetPeriods;
+      }
+
       console.log("AVERAGE", averageAmount);
 
       //then link the user goals with a user's budget periods until the goal is complete
-      budgetPeriods.forEach(async (period) => {
+      for (let j = 0; j < budgetPeriods.length; j++) {
+        let period = budgetPeriods[j];
         await pool.query("INSERT INTO budget_period_goals (amount, goal_id,budget_period_id ) VALUES ($1, $2, $3)", [
           averageAmount,
           goal.id,
           period.id,
         ]);
-      });
-    });
+      }
+    }
 
     //retrieve the goals and transactions linked to the current budget period
     let currentGoals = await pool.query("SELECT * FROM budget_period_goals WHERE budget_period_id=$1", [

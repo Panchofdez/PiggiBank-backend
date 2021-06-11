@@ -129,6 +129,8 @@ router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
     ]);
 
     transactions = transactions.rows;
+    console.log("CURRENT BUDGET PERIOD", currentBudgetPeriod);
+    console.log("Transactions", transactions);
     return res.status(200).send({
       earningHabits,
       expenseHabits,
