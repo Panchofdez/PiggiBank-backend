@@ -87,7 +87,7 @@ router.put("/", requireAuth, async (req, res) => {
     user = user.rows[0];
     console.log("USER", user);
     let fixedSpendingTotal = await pool.query("SELECT SUM(amount) FROM fixed_expenses WHERE user_id = $1", [user_id]);
-    fixedSpendingTotal = fixedSpendingTotal.rows[0].sum;
+    fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
     const totalBudget = getTotalBudget(user.income, fixedSpendingTotal, user.savings);
     console.log("TOTAL BUDGET", totalBudget);
 

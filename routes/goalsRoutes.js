@@ -181,12 +181,13 @@ router.get("/achievements", requireAuth, async (req, res) => {
       );
       progress = progress.rows[0].sum;
 
-      if (progress >= goals[i].amount) {
+      if (parseFloat(progress) >= parseFloat(goals[i].amount)) {
         console.log(progress, goals[i].amount);
+
         completedGoals++;
       }
     }
-
+    console.log("COMPLETED GOALS", completedGoals);
     //To calculate the number of budget periods that a user has completed
     let numBudgetPeriods = await pool.query("SELECT COUNT(*) FROM budget_periods WHERE user_id=$1 AND end_date <= $2", [
       user_id,
