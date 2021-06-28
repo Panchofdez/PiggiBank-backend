@@ -277,12 +277,19 @@ router.get("/achievements", requireAuth, async (req, res) => {
 /**
  * Get the goals that are affecting the current budget period
  */
-router.get("/:currentBudgetPeriodId", requireAuth, async (req, res) => {
+router.get("/", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
-    const { currentBudgetPeriodId } = req.params;
-    console.log(user_id, currentBudgetPeriodId);
     const today = dayjs();
+    //Retrieves the most current budget period
+    let currentBudgetPeriod = await pool.query(
+      "SELECT * FROM budget_periods WHERE user_id = $1 AND end_date > $2 ORDER BY end_date ASC LIMIT 1",
+      [user_id, today]
+    );
+    currentBudgetPeriod = currentBudgetPeriod.rows[0];
+    const currentBudgetPeriodId = currentBudgetPeriod.id;
+    console.log(user_id, currentBudgetPeriodId);
+
     //get all the user goals
     let goals = await pool.query("SELECT * FROM goals WHERE user_id=$1", [user_id]);
     goals = goals.rows;
