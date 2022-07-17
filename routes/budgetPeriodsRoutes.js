@@ -269,7 +269,14 @@ const addBudgetPeriods = async (initialDate, type, user_id, amount, unit, total_
   try {
     let start_date = initialDate;
     let end_date = start_date.add(amount, unit);
-    let final_date = dayjs(initialDate).add(1, "year");
+    let final_date;
+    if (type === "daily") {
+      final_date = dayjs(initialDate).add(1, "month");
+    } else if (type === "weekly" || type === "biweekly") {
+      final_date = dayjs(initialDate).add(3, "month");
+    } else {
+      final_date = dayjs(initialDate).add(1, "year");
+    }
 
     while (end_date <= final_date) {
       await pool.query(
