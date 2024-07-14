@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  db:
+    container_name: db
+    hostname: db
+    image: postgres:12
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./databaseCreation.sql:/docker-entrypoint-initdb.d/databaseCreation.sql
+    networks:
+      - db
+    restart: unless-stopped
+  api:
+    container_name: piggibank-backend
+    image: piggibank-backend
+    restart: always
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      DATABASE_URL: ${DATABASE_URL}
+      SECRET_KEY: ${SECRET_KEY}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN}
+    networks:
+      - db
+    depends_on:
+      - db
+
+volumes:
+  pgdata: {}
+
+networks:
+  db:
+    driver: bridge
+#COMMANDS TO RUN APP IN DEV ENV
+#docker-compose -f docker-compose-dev.yml up
+#docker-compose -f docker-compose-dev.yml up --build
+#docker-compose -f docker-compose-dev.yml down
