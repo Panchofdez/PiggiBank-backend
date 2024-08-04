@@ -61,6 +61,10 @@ router.put("/", requireAuth, async (req, res) => {
     let currentBudgetPeriod = await pool.query("SELECT * FROM budget_periods WHERE id=$1", [currentBudgetPeriodId]);
     currentBudgetPeriod = currentBudgetPeriod.rows[0];
     console.log(currentBudgetPeriod);
+
+    //delete the following budget periods so we can make new updated ones
+    await pool.query("DELETE FROM budget_periods WHERE end_date > $1 AND user_id=$2 AND id != $3", [currentBudgetPeriod.start_date, user_id, currentBudgetPeriodId]);
+
     //update the current budget_period
     //if the start date of the new budget periods is equal or after the start of the current budget period then set the end date of the current period to the start date
     //if before then update the current budget period to start at the startdate
@@ -79,9 +83,7 @@ router.put("/", requireAuth, async (req, res) => {
     }
     currentBudgetPeriod = currentBudgetPeriod.rows[0];
     console.log("START_DATE", startDate);
-    //delete the following budget periods so we can make new updated ones
-    await pool.query("DELETE FROM budget_periods WHERE end_date > $1 AND user_id=$2", [startDate, user_id]);
-
+    
     //Recalculate the total budget
     let user = await pool.query("SELECT income, savings FROM users WHERE id=$1", [user_id]);
     user = user.rows[0];

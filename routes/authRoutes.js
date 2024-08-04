@@ -47,7 +47,7 @@ router.post("/signup", async (req, res) => {
     isSignedUp = isSignedUp.rows[0];
 
     if (isSignedUp) {
-      return res.status(400).send({ error: "Email is already signed up. Please signin instead" });
+      return res.status(400).send({ error: "Email is already signed up. Please sign-in instead" });
     }
 
     //hash the passwords so we aren't storing the passwords in plain text
