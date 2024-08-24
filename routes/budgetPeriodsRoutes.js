@@ -66,21 +66,17 @@ router.put("/", requireAuth, async (req, res) => {
     await pool.query("DELETE FROM budget_periods WHERE end_date > $1 AND user_id=$2 AND id != $3", [currentBudgetPeriod.start_date, user_id, currentBudgetPeriodId]);
 
     //update the current budget_period
-    //if the start date of the new budget periods is equal or after the start of the current budget period then set the end date of the current period to the start date
-    //if before then update the current budget period to start at the startdate
-    if (startDate <= currentBudgetPeriod.start_date) {
-      let endDate = startDate.add(numUnits[type], unitsOfTime[type]);
-      currentBudgetPeriod = await pool.query(
-        "UPDATE budget_periods SET start_date = $1, end_date=$2, period_type=$3 WHERE id = $4 RETURNING *",
-        [startDate, endDate, type, currentBudgetPeriodId]
-      );
-      startDate = endDate;
-    } else {
-      currentBudgetPeriod = await pool.query("UPDATE budget_periods SET end_date=$1 WHERE id = $2 RETURNING *", [
-        startDate,
-        currentBudgetPeriodId,
-      ]);
+    //make sure start of new budget period is after the start of current budget period
+    while(startDate <= currentBudgetPeriod.start_date) {
+      startDate = startDate.add(numUnits[type], unitsOfTime[type]);
     }
+    // set the end date of the current budget period to the start date of new budget period
+    currentBudgetPeriod = await pool.query("UPDATE budget_periods SET end_date=$1, period_type=$2 WHERE id = $3 RETURNING *", [
+      startDate,
+      type,
+      currentBudgetPeriodId,
+    ]);
+
     currentBudgetPeriod = currentBudgetPeriod.rows[0];
     console.log("START_DATE", startDate);
     
