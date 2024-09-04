@@ -12,9 +12,7 @@ router.post("/", requireAuth, async (req, res) => {
     let { type, startDate } = req.body;
     type = type.toLowerCase();
     const user_id = req.user.id;
-    console.log(user_id);
-    startDate = dayjs(startDate);
-    console.log(startDate);
+    startDate = dayjs(startDate).startOf("day");
 
     //Add budget periods based on period type
     if (type === "monthly") {
@@ -52,18 +50,19 @@ router.put("/", requireAuth, async (req, res) => {
     const user_id = req.user.id;
     let { startDate, type, currentBudgetPeriodId } = req.body;
     type = type.toLowerCase();
-    console.log("REQBODY", startDate, type, currentBudgetPeriodId);
-    startDate = dayjs(startDate);
-    let today = dayjs();
+    startDate = dayjs(startDate).startOf("day");
     const unitsOfTime = { daily: "day", monthly: "month", biweekly: "week", weekly: "week", yearly: "year" };
     const numUnits = { daily: 1, monthly: 1, biweekly: 2, weekly: 1, yearly: 1 };
 
     let currentBudgetPeriod = await pool.query("SELECT * FROM budget_periods WHERE id=$1", [currentBudgetPeriodId]);
     currentBudgetPeriod = currentBudgetPeriod.rows[0];
-    console.log(currentBudgetPeriod);
+    let prevType = currentBudgetPeriod.period_type
 
     //delete the following budget periods so we can make new updated ones
-    await pool.query("DELETE FROM budget_periods WHERE end_date > $1 AND user_id=$2 AND id != $3", [currentBudgetPeriod.start_date, user_id, currentBudgetPeriodId]);
+    await pool.query("DELETE FROM budget_periods WHERE start_date >= $1 AND user_id=$2 AND id != $3", [currentBudgetPeriod.start_date, user_id, currentBudgetPeriodId]);
+    
+    //delete any current budget period goals as they will need to be recreated
+    await pool.query("DELETE FROM budget_period_goals WHERE budget_period_id = $1", [currentBudgetPeriodId])
 
     //update the current budget_period
     //make sure start of new budget period is after the start of current budget period
@@ -76,82 +75,20 @@ router.put("/", requireAuth, async (req, res) => {
       type,
       currentBudgetPeriodId,
     ]);
-
     currentBudgetPeriod = currentBudgetPeriod.rows[0];
-    console.log("START_DATE", startDate);
     
     //Recalculate the total budget
     let user = await pool.query("SELECT income, savings FROM users WHERE id=$1", [user_id]);
     user = user.rows[0];
-    console.log("USER", user);
     let fixedSpendingTotal = await pool.query("SELECT SUM(amount) FROM fixed_expenses WHERE user_id = $1", [user_id]);
     fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
     const totalBudget = getTotalBudget(user.income, fixedSpendingTotal, user.savings);
-    console.log("TOTAL BUDGET", totalBudget);
 
     //then add the rest of the budget_periods
     if (type in unitsOfTime) {
-      console.log(numUnits[type], unitsOfTime[type]);
-      await addBudgetPeriods(startDate, type, user_id, numUnits[type], unitsOfTime[type], totalBudget);
+      await addBudgetPeriods(startDate, type, user_id, numUnits[type], unitsOfTime[type], totalBudget, prevType);
     } else {
       return res.status(400).send({ error: "Invalid budget period type" });
-    }
-
-    //retrieve the goals to update them according to the budget periods
-    let goals = await pool.query("SELECT * FROM goals WHERE user_id = $1 AND completed=false", [user_id]);
-    goals = goals.rows;
-    console.log("GOALS", goals);
-
-    for (let i = 0; i < goals.length; i++) {
-      let goal = goals[i];
-      let progress = await pool.query(
-        `SELECT SUM(amount) FROM 
-        (
-          SELECT amount, start_date, end_date FROM budget_period_goals JOIN budget_periods ON budget_period_goals.budget_period_id = budget_periods.id WHERE goal_id = $1 AND start_date <= $2
-        ) AS valid_budgets`,
-        [goal.id, startDate]
-      );
-      progress = progress.rows[0].sum;
-      console.log("PROGRESS", progress);
-      //calculate the average amount to take out every budget period to achieve the goal
-      let budgetPeriods = await pool.query(
-        "SELECT id, period_type, end_date FROM budget_periods WHERE user_id=$1 AND end_date <= $2 AND end_date > $3",
-        [user_id, goal.end_date, startDate]
-      );
-      budgetPeriods = budgetPeriods.rows;
-      let numBudgetPeriods = budgetPeriods.length;
-      console.log("BUDGETPERIODS", budgetPeriods);
-      console.log("NUMBUDGETPERIODS", numBudgetPeriods);
-
-      let averageAmount;
-      if (numBudgetPeriods === 0) {
-        averageAmount = goal.amount - progress;
-      } else {
-        let periodEndDate = dayjs(budgetPeriods[budgetPeriods.length - 1].end_date);
-        let periodType = budgetPeriods[budgetPeriods.length - 1].period_type;
-
-        while (periodEndDate < goal.end_date) {
-          periodEndDate = periodEndDate.add(numUnits[periodType], unitsOfTime[periodType]);
-          if (periodEndDate >= goal.end_date) {
-            break;
-          } else {
-            numBudgetPeriods++;
-          }
-        }
-        averageAmount = (goal.amount - progress) / numBudgetPeriods;
-      }
-
-      console.log("AVERAGE", averageAmount);
-
-      //then link the user goals with a user's budget periods until the goal is complete
-      for (let j = 0; j < budgetPeriods.length; j++) {
-        let period = budgetPeriods[j];
-        await pool.query("INSERT INTO budget_period_goals (amount, goal_id,budget_period_id ) VALUES ($1, $2, $3)", [
-          averageAmount,
-          goal.id,
-          period.id,
-        ]);
-      }
     }
 
     //retrieve the goals and transactions linked to the current budget period
@@ -162,7 +99,7 @@ router.put("/", requireAuth, async (req, res) => {
 
     let transactions = await pool.query("SELECT * FROM transactions WHERE user_id = $1 AND budget_period_id=$2", [
       user_id,
-      currentBudgetPeriod.id,
+      currentBudgetPeriodId,
     ]);
 
     transactions = transactions.rows;
@@ -216,7 +153,6 @@ router.get("/current", requireAuth, async (req, res) => {
           "SELECT * FROM budget_periods WHERE user_id = $1 AND end_date > $2 ORDER BY end_date ASC LIMIT 1",
           [user_id, today]
         );
-        console.log(newCurrentBudget.rows);
         return res.status(200).send({
           currentBudgetPeriod: newCurrentBudget.rows[0],
           currentGoals: [],
@@ -257,32 +193,94 @@ const getTotalBudget = (income, fixedSpending, savings) => {
  *Adds recurring budget periods for the length of a year
  * @param {*} initialDate date to start adding budget periods
  * @param {*} type budget period type
- * @param {*} user_id
+ * @param {*} userId
  * @param {*} amount number of time units to add. For ex. biweekly is 2 (amount) weeks
  * @param {*} unit unit of time. For ex. Month
- * @param {*} total_budget the initial total budget of the period type
+ * @param {*} totalBudget the initial total budget of the period type
  * @returns a promise to indicate if budget periods were added successfully
  */
-const addBudgetPeriods = async (initialDate, type, user_id, amount, unit, total_budget = 0) => {
+const addBudgetPeriods = async (initialDate, type, userId, amount, unit, totalBudget = 0, prevType = null) => {
   try {
-    let start_date = initialDate;
-    let end_date = start_date.add(amount, unit);
-    let final_date;
+    let startDate = initialDate;
+    let endDate = startDate.add(amount, unit);
+    let finalDate;
     if (type === "daily") {
-      final_date = dayjs(initialDate).add(1, "month");
+      finalDate = dayjs(initialDate).add(1, "month");
     } else if (type === "weekly" || type === "biweekly") {
-      final_date = dayjs(initialDate).add(3, "month");
+      finalDate = dayjs(initialDate).add(3, "month");
     } else {
-      final_date = dayjs(initialDate).add(1, "year");
+      finalDate = dayjs(initialDate).add(1, "year");
     }
 
-    while (end_date <= final_date) {
+    while (endDate <= finalDate) {
       await pool.query(
         "INSERT INTO budget_periods (period_type, start_date, end_date, user_id, total_budget) VALUES ($1, $2, $3, $4, $5)",
-        [type, start_date, end_date, user_id, total_budget]
+        [type, startDate, endDate, userId, totalBudget]
       );
-      start_date = end_date;
-      end_date = start_date.add(amount, unit);
+      startDate = endDate;
+      endDate = startDate.add(amount, unit);
+    }
+
+    //retrieve the goals to update them according to the budget periods
+    let goals = await pool.query("SELECT * FROM goals WHERE user_id = $1 AND completed=false", [userId]);
+    goals = goals.rows;
+
+    for (let i = 0; i < goals.length; i++) {
+      let goal = goals[i];
+      let budgetPeriods = await pool.query(
+        "SELECT id, period_type, end_date FROM budget_periods WHERE user_id=$1 AND end_date <= $2 AND end_date >= $3 ORDER BY end_date ASC",
+        [userId, goal.end_date, initialDate]
+      );
+      budgetPeriods = budgetPeriods.rows;
+      let averageAmount;
+      if (prevType && prevType === type){
+        let latestBudgetPeriodGoal = await pool.query(
+          "SELECT * FROM budget_period_goals WHERE goal_id = $1 ORDER BY id DESC LIMIT 1",
+          [goal.id]
+        )
+        latestBudgetPeriodGoal = latestBudgetPeriodGoal.rows[0];
+        if (latestBudgetPeriodGoal){
+          averageAmount = latestBudgetPeriodGoal.amount
+        }
+      }
+
+      if (!averageAmount){
+        let progress = await pool.query(
+          `SELECT SUM(amount) FROM 
+          (
+            SELECT amount, start_date, end_date FROM budget_period_goals JOIN budget_periods ON budget_period_goals.budget_period_id = budget_periods.id WHERE goal_id = $1 AND start_date <= $2
+          ) AS valid_budgets`,
+          [goal.id, initialDate]
+        );
+        progress = progress.rows[0].sum;
+        //calculate the average amount to take out every budget period to achieve the goal 
+        let numBudgetPeriods = budgetPeriods.length;
+        if (numBudgetPeriods === 0) {
+          averageAmount = goal.amount - progress;
+        } else {
+          let periodEndDate = dayjs(budgetPeriods[budgetPeriods.length - 1].end_date);
+  
+          while (periodEndDate < goal.end_date) {
+            periodEndDate = periodEndDate.add(amount, unit);
+            if (periodEndDate >= goal.end_date) {
+              break;
+            } else {
+              numBudgetPeriods++;
+            }
+          }
+          averageAmount = (goal.amount - progress) / numBudgetPeriods;
+        }
+  
+      }
+      //then link the user goals with a user's budget periods until the goal is complete
+      for (let j = 0; j < budgetPeriods.length; j++) {
+        let period = budgetPeriods[j];
+        await pool.query("INSERT INTO budget_period_goals (amount, goal_id,budget_period_id ) VALUES ($1, $2, $3)", [
+          averageAmount,
+          goal.id,
+          period.id,
+        ]);
+      }
     }
 
     return Promise.resolve();

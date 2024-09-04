@@ -15,7 +15,6 @@ router.get("/", requireAuth, async (req, res) => {
     fixedSpendingList = fixedSpendingList.rows;
     let fixedSpendingTotal = await pool.query("SELECT SUM(amount) FROM fixed_expenses WHERE user_id = $1", [user_id]);
     fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
-    console.log({ ...user, fixedSpendingList, fixedSpendingTotal });
     return res.status(200).send({ ...user, fixedSpendingList, fixedSpendingTotal });
   } catch (error) {
     console.log(error.message);

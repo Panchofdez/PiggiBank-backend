@@ -25,7 +25,6 @@ router.post("/", requireAuth, async (req, res) => {
       budget_period_id,
     ]);
     transactions = transactions.rows;
-    console.log("TRANSACTIONS", transactions);
     return res.status(200).send({ transactions });
   } catch (error) {
     console.log(error.message);
@@ -41,7 +40,6 @@ router.post("/", requireAuth, async (req, res) => {
 router.delete("/", requireAuth, async (req, res) => {
   try {
     const { transaction_id, budget_period_id } = req.body;
-    console.log(transaction_id, budget_period_id);
     const user_id = req.user.id;
     await pool.query("DELETE FROM transactions WHERE id=$1", [transaction_id]);
 
@@ -50,7 +48,6 @@ router.delete("/", requireAuth, async (req, res) => {
       budget_period_id,
     ]);
     transactions = transactions.rows;
-    console.log("TRANSACTIONS", transactions);
     return res.status(200).send({ transactions });
   } catch (error) {
     console.log(error.message);
@@ -67,7 +64,6 @@ router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     const budgetPeriodId = req.params.budgetPeriodId;
-    console.log(user_id, budgetPeriodId);
 
     //retrieve the transactions that are expenses of the user and group them by category
     let expenseHabits = await pool.query(
@@ -129,8 +125,6 @@ router.get("/habits/:budgetPeriodId", requireAuth, async (req, res) => {
     ]);
 
     transactions = transactions.rows;
-    console.log("CURRENT BUDGET PERIOD", currentBudgetPeriod);
-    console.log("Transactions", transactions);
     return res.status(200).send({
       earningHabits,
       expenseHabits,
@@ -152,7 +146,6 @@ router.get("/habits", requireAuth, async (req, res) => {
   try {
     const user_id = req.user.id;
     const { category, budgetPeriodId } = req.query;
-    console.log(category, budgetPeriodId);
 
     //get the transactions that are of the selected category and budget period
     let transactions = await pool.query(
@@ -183,7 +176,6 @@ router.get("/habits", requireAuth, async (req, res) => {
       "SELECT SUM(amount) FROM transactions WHERE user_id =$1 AND budget_period_id=$2 AND category=$3",
       [user_id, previousBudgetPeriodId, category]
     );
-    console.log(previousAmountSpent.rows[0]);
     previousAmountSpent = previousAmountSpent.rows[0].sum !== null ? previousAmountSpent.rows[0].sum : 0;
 
     //get the amount spent for the category in the current period
@@ -191,7 +183,6 @@ router.get("/habits", requireAuth, async (req, res) => {
       "SELECT SUM(amount) FROM transactions WHERE user_id =$1 AND budget_period_id=$2 AND category=$3",
       [user_id, budgetPeriodId, category]
     );
-    console.log(currentAmountSpent.rows[0]);
     currentAmountSpent = currentAmountSpent.rows[0].sum !== null ? currentAmountSpent.rows[0].sum : 0;
 
     //then calculate the difference between the amount spent in the previous and current periods
@@ -201,8 +192,6 @@ router.get("/habits", requireAuth, async (req, res) => {
     } else {
       monthlyDifference = ((currentAmountSpent - previousAmountSpent) / Math.abs(previousAmountSpent)) * 100;
     }
-    console.log(previousBudgetPeriodId, budgetPeriodId, nextBudgetPeriodId);
-    console.log(previousAmountSpent, currentAmountSpent, monthlyDifference);
     return res
       .status(200)
       .send({ transactions, currentBudgetPeriod, previousBudgetPeriodId, nextBudgetPeriodId, monthlyDifference });

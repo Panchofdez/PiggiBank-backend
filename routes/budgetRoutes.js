@@ -12,16 +12,13 @@ router.post("/income", requireAuth, async (req, res) => {
     const user_id = req.user.id;
     let { income, startDate, currentBudgetPeriodId } = req.body;
     startDate = dayjs(startDate);
-    console.log(startDate);
     let user = await pool.query("UPDATE users SET income=$1 WHERE id = $2 RETURNING *", [income, user_id]);
     user = user.rows[0];
-    console.log(user);
 
     let fixedSpendingTotal = await pool.query("SELECT SUM(amount) FROM fixed_expenses WHERE user_id = $1", [user_id]);
     fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
     //we have to recalculate the total budget
     const totalBudget = getTotalBudget(user.income, fixedSpendingTotal, user.savings);
-    console.log("TOTAL BUDGET", totalBudget);
     await pool.query("UPDATE budget_periods SET total_budget=$1 WHERE user_id=$2 AND end_date > $3", [
       totalBudget,
       user_id,
@@ -54,7 +51,6 @@ router.post("/savings", requireAuth, async (req, res) => {
     fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
     //we have to recalculate the total budget
     const totalBudget = getTotalBudget(user.income, fixedSpendingTotal, user.savings);
-    console.log("TOTAL BUDGET", totalBudget);
 
     //update current and future budget periods
     await pool.query("UPDATE budget_periods SET total_budget=$1 WHERE user_id=$2 AND end_date > $3", [
@@ -94,8 +90,6 @@ router.post("/fixedexpenses", requireAuth, async (req, res) => {
     const user_id = req.user.id;
     const { fixedSpendingList, startDate, currentBudgetPeriodId } = req.body;
 
-    console.log(fixedSpendingList);
-
     //reset all the users fixed expenses
     await pool.query("DELETE FROM fixed_expenses WHERE user_id=$1", [user_id]);
 
@@ -115,10 +109,8 @@ router.post("/fixedexpenses", requireAuth, async (req, res) => {
     let fixedSpendingTotal = await pool.query("SELECT SUM(amount) FROM fixed_expenses WHERE user_id = $1", [user_id]);
     fixedSpendingTotal = fixedSpendingTotal.rows[0].sum === null ? 0 : fixedSpendingTotal.rows[0].sum;
 
-    console.log("fixedSpendingTotal", fixedSpendingTotal);
     //we have to recalculate the total budget
     const totalBudget = getTotalBudget(income, fixedSpendingTotal, savings);
-    console.log("TOTAL BUDGET", totalBudget);
     await pool.query("UPDATE budget_periods SET total_budget=$1 WHERE user_id=$2 AND end_date > $3", [
       totalBudget,
       user_id,
