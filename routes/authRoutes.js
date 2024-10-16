@@ -20,7 +20,6 @@ const mailgun = require("mailgun-js")({ apiKey: API_KEY, domain: DOMAIN });
 router.post("/signup", async (req, res) => {
   try {
     const { email, password, password2 } = req.body;
-    console.log(email, password, password2);
 
     //form data must be valid
     if (
@@ -47,7 +46,7 @@ router.post("/signup", async (req, res) => {
     isSignedUp = isSignedUp.rows[0];
 
     if (isSignedUp) {
-      return res.status(400).send({ error: "Email is already signed up. Please signin instead" });
+      return res.status(400).send({ error: "Email is already signed up. Please sign-in instead" });
     }
 
     //hash the passwords so we aren't storing the passwords in plain text
@@ -57,9 +56,7 @@ router.post("/signup", async (req, res) => {
       email,
       hashedPassword,
     ]);
-    console.log(result);
     const user = result.rows[0];
-    console.log(user);
     //generate an access token to be authenticated for other routes and refresh token to create new access tokens for the user
     const accessToken = generateAccessToken({ userId: user.id, email: user.email });
     const refreshToken = generateRefreshToken({ userId: user.id, email: user.email });
@@ -80,7 +77,6 @@ router.post("/signup", async (req, res) => {
 router.post("/signin", async (req, res) => {
   try {
     const { email, password } = req.body;
-    console.log(email, password);
 
     //must provide an email and password
     if (email === null || password === null || isEmpty(email) || isEmpty(password)) {
@@ -95,12 +91,10 @@ router.post("/signin", async (req, res) => {
     //If the same , sign in the user
     const result = await pool.query("SELECT * FROM users WHERE users.email=$1", [email]);
     const user = result.rows[0];
-    console.log(user);
     if (!user) {
       return res.status(400).send({ error: "Must provide a valid email and password" });
     }
     const isValid = await bcrypt.compare(password, user.password);
-    console.log("ISVALID", isValid);
     //passwords don't match
     if (!isValid) {
       res.status(400).send({ error: "Invalid password" });
@@ -133,21 +127,18 @@ router.post("/signin", async (req, res) => {
 router.post("/token", async (req, res) => {
   try {
     const refreshToken = req.body.token;
-    console.log("REFRESH TOKEN", refreshToken);
     if (refreshToken === null) {
       return res.sendStatus(401);
     }
     //Find the refresh token in the database
     let result = await pool.query("SELECT refresh_token FROM users WHERE refresh_token=$1", [refreshToken]);
     result = result.rows;
-    console.log("RESULT", result);
 
     //if refresh token can't be found in database then it must be an invalid refresh token
     if (result.length === 0) return res.sendStatus(403);
 
     //retrieve user info from the refresh token and use that info to create a new access token
     const payload = await jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
-    console.log("PAYLOAD", payload);
     const { userId, email } = payload;
     const accessToken = generateAccessToken({ userId, email });
     res.json({ accessToken });
@@ -164,7 +155,6 @@ router.post("/token", async (req, res) => {
 router.delete("/signout", async (req, res) => {
   try {
     const refreshToken = req.body.token;
-    console.log("DELETE REFRESH TOKEN", refreshToken);
     await pool.query("UPDATE users SET refresh_token=null WHERE refresh_token=$1", [refreshToken]);
     res.sendStatus(204);
   } catch (error) {
@@ -178,7 +168,6 @@ router.delete("/signout", async (req, res) => {
  */
 router.post("/facebooklogin", (req, res) => {
   const { token } = req.body;
-  console.log("FACEBOOK TOKEN", token);
   let urlGraphFacebook;
 
   urlGraphFacebook = `https://graph.facebook.com/v10.0/me?fields=email&access_token=${token}`;
@@ -188,9 +177,7 @@ router.post("/facebooklogin", (req, res) => {
   })
     .then((response) => response.json())
     .then(async (response) => {
-      console.log(response);
       const { email } = response;
-      console.log("email", email);
       const result = await pool.query("SELECT * FROM users WHERE email=$1", [email]);
       let user = result.rows[0];
 
@@ -198,7 +185,6 @@ router.post("/facebooklogin", (req, res) => {
       if (!user) {
         user = await pool.query("INSERT INTO users (email) VALUES($1) RETURNING *", [email]);
         user = user.rows[0];
-        console.log("USER", user);
       }
       const accessToken = generateAccessToken({ userId: user.id, email });
       const refreshToken = generateRefreshToken({ userId: user.id, email });
@@ -234,7 +220,6 @@ router.post("/googlelogin", async (req, res) => {
       user = await pool.query("INSERT INTO users (email) VALUES($1) RETURNING *", [email]);
       user = user.rows[0];
     }
-    console.log("USER", user);
     const accessToken = generateAccessToken({ userId: user.id, email });
     const refreshToken = generateRefreshToken({ userId: user.id, email });
 
@@ -261,7 +246,6 @@ router.post("/verificationcode", async (req, res) => {
   try {
     const { email } = req.body;
     const code = Math.floor(100000 + Math.random() * 900000);
-    console.log(email, code);
     const data = {
       from: "PiggiBank <piggibankco@gmail.com>",
       to: `${email}`,
@@ -274,7 +258,6 @@ router.post("/verificationcode", async (req, res) => {
         console.log(error);
         return res.status(400).send({ error });
       }
-      console.log(body);
       return res.status(200).send({ code });
     });
   } catch (error) {
@@ -301,7 +284,6 @@ router.put("/resetpassword", async (req, res) => {
     if (!user) {
       return res.status(400).send({ error: "User not found" });
     }
-    console.log("USER", user);
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     //updates the password of the user in the database
