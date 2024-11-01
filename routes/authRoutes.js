@@ -298,6 +298,42 @@ router.put("/resetpassword", async (req, res) => {
 });
 
 /**
+ * Delete all the relevant information about the user
+ */
+router.delete("/userdata", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    //must provide an email and password
+    if (email === null || password === null || isEmpty(email) || isEmpty(password)) {
+      return res.status(400).send({ error: "Must provide email and password" });
+    }
+    //must provide a valid email
+    if (!isEmail(email)) {
+      return res.status(422).json({ error: "Please provide a valid email" });
+    }
+
+    //checks to see if the user is signed up. if so then compare the password to the one saved in the database.
+    //If the same , sign in the user
+    const result = await pool.query("SELECT * FROM users WHERE users.email=$1", [email]);
+    const user = result.rows[0];
+    if (!user) {
+      return res.status(400).send({ error: "Must provide a valid email and password" });
+    }
+    const isValid = await bcrypt.compare(password, user.password);
+    //passwords don't match
+    if (!isValid) {
+      res.status(400).send({ error: "Invalid password" });
+    }
+    await pool.query("DELETE FROM users WHERE id=$1", [user.id])
+    return res.status(200).send({ message: "Success" });
+  } catch (error) {
+    console.log(error.message);
+    return res.status(400).send({ error: "Unable to delete user information" });
+  }
+});
+
+/**
  *  Checks to see if the provided email is a valid one.
  * @param {*} email
  * @returns a boolean indicating if the email is in valid email format
